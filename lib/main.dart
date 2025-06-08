@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'spoonacular_api.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -28,9 +32,11 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 174, 235, 166)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 174, 235, 166),
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Good Eats'),
     );
   }
 }
@@ -54,17 +60,31 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _recipes = [];
+  bool _loading = false;
+  String? _error;
+  Future<void> _search() async {
+    final query = _controller.text.trim();
+    if (query.isEmpty) return;
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final results = await SpoonacularApi.searchRecipes(query);
+      setState(() {
+        _recipes = results;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -85,38 +105,38 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Column(
+        children: [
+          TextField(
+            decoration: const InputDecoration(labelText: 'Search Recipes'),
+            controller: _controller,
+            onSubmitted: (_) => _search(),
+          ),
+
+          SizedBox(
+            width: 400.0,
+            height: 40.0,
+            child: ElevatedButton(
+              onPressed: _search,
+              child: _loading ? null : const Text('search'),
             ),
-          ],
-        ),
+          ),
+          if (_error != null) Text(_error!),
+          if (_recipes.isNotEmpty)
+            Expanded(
+              child: ListView.builder(
+                itemCount: _recipes.length,
+                itemBuilder: (context, i) {
+                  final recipe = _recipes[i] as Map<String, dynamic>;
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    child: ListTile(title: Text(recipe['title'])),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.qr_code),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }

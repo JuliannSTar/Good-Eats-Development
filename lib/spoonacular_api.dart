@@ -15,7 +15,8 @@ class SpoonacularApi {
 
     if (response.statusCode != 200) {
       throw Exception(
-          'Failed to search recipes (status code: ${response.statusCode})');
+        'Failed to search recipes (status code: ${response.statusCode})',
+      );
     }
 
     final Map<String, dynamic> jsonBody = json.decode(response.body);
@@ -24,5 +25,21 @@ class SpoonacularApi {
     }
 
     return jsonBody['results'] as List<dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> getRecipeInformation(int id) async {
+    final uri = Uri.parse(
+      '$_baseUrl/recipes/$id/information?includeNutrition=true&apiKey=$_apiKey',
+    );
+
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to fetch recipe details (status code: ${response.statusCode})',
+      );
+    }
+
+    return json.decode(response.body) as Map<String, dynamic>;
   }
 }

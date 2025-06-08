@@ -137,6 +137,91 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
         ],
       ),
+      //make page for recipe info when tab pressed
+    );
+  }
+}
+
+class RecipeInfo extends StatefulWidget {
+  final int recipePageId;
+
+  const RecipeInfo({super.key, required this.recipePageId});
+  @override
+  RecipeInfoState createState() => RecipeInfoState();
+}
+
+class RecipeInfoState extends State<RecipeInfo> {
+  Map<String, dynamic>? _recipeInfo;
+  List<dynamic>? _ingredients;
+  bool _loading = true;
+  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    _fetchInfo();
+  }
+
+  Future<void> _fetchInfo() async {
+    try {
+      final details = await SpoonacularApi.getRecipeInformation(
+        widget.recipePageId,
+      );
+      setState(() {
+        _recipeInfo = details;
+        _ingredients = details['extendedIngredients'];
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return Center(child: Text(_error!));
+    if (_recipeInfo == null) return const SizedBox.shrink();
+    return Scaffold(
+      appBar: AppBar(title: Text("Recipe Details")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            //title
+            Text(_recipeInfo!['title']),
+            //style
+            const SizedBox(height: 16),
+            //Calories
+            Text(
+              'Calories: ${_recipeInfo!['nutrition']?['nutrients']?[0]?['amount'] ?? 'N/A'} kcal',
+              //style),
+            ),
+            const SizedBox(height: 16),
+
+            Text(
+              _recipeInfo!['title'] ?? 'Recipe',
+              //text style
+            ),
+            //ingredients
+            SizedBox(height: 16),
+            Text('Ingredients:'), //add text style later
+            SizedBox(height: 8),
+            ...?_ingredients?.map((ingredient) {
+              final amount = ingredient['amount']?.toString() ?? '';
+              final unit = ingredient['unit'] ?? '';
+              final name = ingredient['name'] ?? '';
+              return Text('$amount $unit $name');
+            }),
+          ],
+        ),
+      ),
     );
   }
 }

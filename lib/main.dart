@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart';
+import 'spoonacular_api.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -28,9 +33,11 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 174, 235, 166)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 174, 235, 166),
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Good Eats'),
     );
   }
 }
@@ -54,17 +61,31 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
+  final TextEditingController _controller = TextEditingController();
+  List<dynamic> _recipes = [];
+  bool _loading = false;
+  String? _error;
+  Future<void> _search() async {
+    final query = _controller.text.trim();
+    if (query.isEmpty) return;
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final results = await SpoonacularApi.searchRecipes(query);
+      setState(() {
+        _recipes = results;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -85,38 +106,138 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Column(
+        children: [
+          TextField(
+            decoration: const InputDecoration(labelText: 'Search Recipes'),
+            controller: _controller,
+            onSubmitted: (_) => _search(),
+          ),
+
+          SizedBox(
+            width: 400.0,
+            height: 40.0,
+            child: ElevatedButton(
+              onPressed: _search,
+              child: _loading ? null : const Text('search'),
             ),
+          ),
+          if (_error != null) Text(_error!),
+          if (_recipes.isNotEmpty)
+            Expanded(
+              child: ListView.builder(
+                itemCount: _recipes.length,
+                itemBuilder: (context, i) {
+                  final recipe = _recipes[i] as Map<String, dynamic>;
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    child: ListTile(
+                      title: Text(recipe['title']),
+                      leading: recipe['image'] != null
+                          ? Image.network(
+                              recipe['image'],
+                              width: 50,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const SizedBox.shrink();
+                              },
+                            )
+                          : null,
+                      onTap: () async {
+                        try {
+                          final details =
+                              await SpoonacularApi.getRecipeInformation(
+                                recipe['id'],
+                              );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RecipeInfo(recipeInfo: details),
+                            ),
+                          );
+                        } catch (e) {}
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+      //make page for recipe info when tab pressed
+    );
+  }
+}
+
+class RecipeInfo extends StatelessWidget {
+  final Map<String, dynamic> recipeInfo;
+  const RecipeInfo({super.key, required this.recipeInfo});
+  @override
+  Widget build(BuildContext context) {
+    final _ingredients = recipeInfo['extendedIngredients'];
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Recipe Details"),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            //title
+            Text(
+              recipeInfo['title'],
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: Image.network(
+                recipeInfo['image'],
+                width: 350,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            //style
+            const SizedBox(height: 16),
+            //Calories
+            Text(
+              'Calories: ${recipeInfo['nutrition']?['nutrients']?[0]?['amount'] ?? 'N/A'} kcal',
+              //style),
+            ),
+            const SizedBox(height: 16),
+
+            //text style
+            //ingredients
+            SizedBox(height: 16),
+            Text('Ingredients:', style: Theme.of(context).textTheme.titleLarge),
+            SizedBox(height: 8),
+            ...?_ingredients?.map((ingredient) {
+              String formatAmount(num value) {
+                final s = value.toStringAsFixed(2);
+                return s.replaceAll(RegExp(r'\.?0+$'), '');
+              }
+
+              final rawAmount = ingredient['amount'];
+              final amount = rawAmount != null
+                  ? formatAmount((rawAmount as num).toDouble())
+                  : '';
+              final unit = ingredient['unit'] ?? '';
+              final name = ingredient['name'] ?? '';
+              return Text('$amount $unit $name');
+            }),
+            const SizedBox(height: 16),
+            Text(
+              'Instructions:',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Html(data: recipeInfo['instructions'] as String),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.qr_code),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }

@@ -8,7 +8,7 @@ class SpoonacularApi {
 
   static Future<List<dynamic>> searchRecipes(String query) async {
     final uri = Uri.parse(
-      '$_baseUrl/recipes/complexSearch?query=${Uri.encodeQueryComponent(query)}&apiKey=$_apiKey',
+      '$_baseUrl/recipes/complexSearch?query=${Uri.encodeQueryComponent(query)}&apiKey=$_apiKey&number=30',
     );
 
     final response = await http.get(uri);

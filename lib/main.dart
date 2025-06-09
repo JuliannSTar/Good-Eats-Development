@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'spoonacular_api.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -130,7 +131,33 @@ class _MyHomePageState extends State<MyHomePage> {
                   final recipe = _recipes[i] as Map<String, dynamic>;
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(title: Text(recipe['title'])),
+                    child: ListTile(
+                      title: Text(recipe['title']),
+                      leading: recipe['image'] != null
+                          ? Image.network(
+                              recipe['image'],
+                              width: 50,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const SizedBox.shrink();
+                              },
+                            )
+                          : null,
+                      onTap: () async {
+                        try {
+                          final details =
+                              await SpoonacularApi.getRecipeInformation(
+                                recipe['id'],
+                              );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RecipeInfo(recipeInfo: details),
+                            ),
+                          );
+                        } catch (e) {}
+                      },
+                    ),
                   );
                 },
               ),
@@ -142,83 +169,72 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class RecipeInfo extends StatefulWidget {
-  final int recipePageId;
-
-  const RecipeInfo({super.key, required this.recipePageId});
-  @override
-  RecipeInfoState createState() => RecipeInfoState();
-}
-
-class RecipeInfoState extends State<RecipeInfo> {
-  Map<String, dynamic>? _recipeInfo;
-  List<dynamic>? _ingredients;
-  bool _loading = true;
-  String? _error;
-  @override
-  void initState() {
-    super.initState();
-    _fetchInfo();
-  }
-
-  Future<void> _fetchInfo() async {
-    try {
-      final details = await SpoonacularApi.getRecipeInformation(
-        widget.recipePageId,
-      );
-      setState(() {
-        _recipeInfo = details;
-        _ingredients = details['extendedIngredients'];
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-      });
-    } finally {
-      setState(() {
-        _loading = false;
-      });
-    }
-  }
-
+class RecipeInfo extends StatelessWidget {
+  final Map<String, dynamic> recipeInfo;
+  const RecipeInfo({super.key, required this.recipeInfo});
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Text(_error!));
-    if (_recipeInfo == null) return const SizedBox.shrink();
+    final _ingredients = recipeInfo['extendedIngredients'];
     return Scaffold(
-      appBar: AppBar(title: Text("Recipe Details")),
+      appBar: AppBar(
+        title: Text("Recipe Details"),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             //title
-            Text(_recipeInfo!['title']),
+            Text(
+              recipeInfo['title'],
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: Image.network(
+                recipeInfo['image'],
+                width: 350,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
             //style
             const SizedBox(height: 16),
             //Calories
             Text(
-              'Calories: ${_recipeInfo!['nutrition']?['nutrients']?[0]?['amount'] ?? 'N/A'} kcal',
+              'Calories: ${recipeInfo['nutrition']?['nutrients']?[0]?['amount'] ?? 'N/A'} kcal',
               //style),
             ),
             const SizedBox(height: 16),
 
-            Text(
-              _recipeInfo!['title'] ?? 'Recipe',
-              //text style
-            ),
+            //text style
             //ingredients
             SizedBox(height: 16),
-            Text('Ingredients:'), //add text style later
+            Text('Ingredients:', style: Theme.of(context).textTheme.titleLarge),
             SizedBox(height: 8),
             ...?_ingredients?.map((ingredient) {
-              final amount = ingredient['amount']?.toString() ?? '';
+              String formatAmount(num value) {
+                final s = value.toStringAsFixed(2);
+                return s.replaceAll(RegExp(r'\.?0+$'), '');
+              }
+
+              final rawAmount = ingredient['amount'];
+              final amount = rawAmount != null
+                  ? formatAmount((rawAmount as num).toDouble())
+                  : '';
               final unit = ingredient['unit'] ?? '';
               final name = ingredient['name'] ?? '';
               return Text('$amount $unit $name');
             }),
+            const SizedBox(height: 16),
+            Text(
+              'Instructions:',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Html(data: recipeInfo['instructions'] as String),
           ],
         ),
       ),

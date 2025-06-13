@@ -17,7 +17,11 @@ jobs:
           flutter-version: '3.8.1' # or whatever version you're using
 
       - run: flutter pub get
-      - run: flutter build web --base-href /Good-Eats-Development/
+
+      - run: |
+          flutter build web \
+            --web-renderer html \
+            --base-href /Good-Eats-Development/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3

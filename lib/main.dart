@@ -163,13 +163,9 @@ class _MyHomePageState extends State<MyHomePage> {
                           child: ListTile(
                             title: Text(recipe['title']),
                             leading: recipe['image'] != null
-                                ? Image.network(
-                                    recipe['image'],
-                                    width: 50,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const SizedBox.shrink();
-                                    },
+                                ? Html(
+                                    data:
+                                        '<img src="${recipe['image']}" width="50" style="object-fit:cover;"/>',
                                   )
                                 : null,
                             onTap: () async {

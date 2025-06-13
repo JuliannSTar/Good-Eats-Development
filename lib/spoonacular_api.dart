@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SpoonacularApi {
-  static final String _apiKey = dotenv.env['SPOONACULAR_API_KEY'] ?? '';
+  static final String _apiKey = '1c1364d7d3b24ef78036ad2c6f4d54af';
   static const String _baseUrl = 'https://api.spoonacular.com';
 
   static Future<Map<String, dynamic>> searchRecipes(

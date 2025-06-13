@@ -65,17 +65,44 @@ class _MyHomePageState extends State<MyHomePage> {
   List<dynamic> _recipes = [];
   bool _loading = false;
   String? _error;
-  Future<void> _search() async {
+  int _offset = 0;
+  int _totalResults = 0;
+  bool _loadingMore = false;
+  String _lastQuery = '';
+  Future<void> _search({bool loadMore = false}) async {
     final query = _controller.text.trim();
     if (query.isEmpty) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final results = await SpoonacularApi.searchRecipes(query);
+
+    if (!loadMore) {
+      // New search → reset
       setState(() {
-        _recipes = results;
+        _offset = 0;
+        _recipes = [];
+        _totalResults = 0;
+        _error = null;
+        _loading = true;
+        _lastQuery = query;
+      });
+    } else {
+      // Load more
+      setState(() {
+        _loadingMore = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final jsonBody = await SpoonacularApi.searchRecipes(
+        _lastQuery,
+        offset: _offset,
+      );
+      final results = jsonBody['results'] as List<dynamic>;
+      final totalResults = jsonBody['totalResults'] as int;
+
+      setState(() {
+        _recipes.addAll(results);
+        _totalResults = totalResults;
+        _offset += results.length;
       });
     } catch (e) {
       setState(() {
@@ -84,6 +111,7 @@ class _MyHomePageState extends State<MyHomePage> {
     } finally {
       setState(() {
         _loading = false;
+        _loadingMore = false;
       });
     }
   }
@@ -125,41 +153,60 @@ class _MyHomePageState extends State<MyHomePage> {
           if (_error != null) Text(_error!),
           if (_recipes.isNotEmpty)
             Expanded(
-              child: ListView.builder(
-                itemCount: _recipes.length,
-                itemBuilder: (context, i) {
-                  final recipe = _recipes[i] as Map<String, dynamic>;
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      title: Text(recipe['title']),
-                      leading: recipe['image'] != null
-                          ? Image.network(
-                              recipe['image'],
-                              width: 50,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const SizedBox.shrink();
-                              },
-                            )
-                          : null,
-                      onTap: () async {
-                        try {
-                          final details =
-                              await SpoonacularApi.getRecipeInformation(
-                                recipe['id'],
-                              );
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => RecipeInfo(recipeInfo: details),
-                            ),
-                          );
-                        } catch (e) {}
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _recipes.length,
+                      itemBuilder: (context, i) {
+                        final recipe = _recipes[i] as Map<String, dynamic>;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          child: ListTile(
+                            title: Text(recipe['title']),
+                            leading: recipe['image'] != null
+                                ? Image.network(
+                                    recipe['image'],
+                                    width: 50,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const SizedBox.shrink();
+                                    },
+                                  )
+                                : null,
+                            onTap: () async {
+                              try {
+                                final details =
+                                    await SpoonacularApi.getRecipeInformation(
+                                      recipe['id'],
+                                    );
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        RecipeInfo(recipeInfo: details),
+                                  ),
+                                );
+                              } catch (e) {}
+                            },
+                          ),
+                        );
                       },
                     ),
-                  );
-                },
+                  ),
+                  if (_offset < _totalResults)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: ElevatedButton(
+                        onPressed: _loadingMore
+                            ? null
+                            : () => _search(loadMore: true),
+                        child: _loadingMore
+                            ? const CircularProgressIndicator()
+                            : const Text('Load More'),
+                      ),
+                    ),
+                ],
               ),
             ),
         ],
@@ -190,25 +237,48 @@ class RecipeInfo extends StatelessWidget {
               recipeInfo['title'],
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: Image.network(
-                recipeInfo['image'],
-                width: 350,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const SizedBox.shrink();
-                },
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: Image.network(
+                    recipeInfo['image'],
+                    width: 200,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+                SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Health Score',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        '${recipeInfo['healthScore']?.toStringAsFixed(0) ?? 'N/A'}%',
+                      ),
+                      Text(
+                        'Calories',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+
+                      Text(
+                        '${recipeInfo['nutrition']?['nutrients']?[0]?['amount']?.toStringAsFixed(0) ?? 'N/A'} kcal',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             //style
             const SizedBox(height: 16),
             //Calories
-            Text(
-              'Calories: ${recipeInfo['nutrition']?['nutrients']?[0]?['amount'] ?? 'N/A'} kcal',
-              //style),
-            ),
-            const SizedBox(height: 16),
 
             //text style
             //ingredients
@@ -234,7 +304,130 @@ class RecipeInfo extends StatelessWidget {
               'Instructions:',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            Html(data: recipeInfo['instructions'] as String),
+            SizedBox(height: 8),
+
+            if ((recipeInfo['analyzedInstructions'] as List?) != null &&
+                (recipeInfo['analyzedInstructions'] as List).isNotEmpty)
+              ...((recipeInfo['analyzedInstructions'][0]['steps'] as List).map<
+                Widget
+              >((step) {
+                final stepNumber = step['number'];
+                final stepText = step['step'];
+
+                final ingredients = step['ingredients'] as List;
+                final equipment = step['equipment'] as List;
+
+                final length = step['length'];
+
+                return ExpansionTile(
+                  title: Text('Step $stepNumber'),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Step text
+                          Text(stepText),
+
+                          // Optional time
+                          if (length != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                'Time: ${length['number']} ${length['unit']}',
+                              ),
+                            ),
+
+                          // Ingredients
+                          if (ingredients.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Ingredients:',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: ingredients.map<Widget>((ingredient) {
+                                final name = ingredient['name'];
+                                final imageUrl =
+                                    ingredient['image'] != null &&
+                                        ingredient['image']
+                                            .toString()
+                                            .isNotEmpty
+                                    ? 'https://spoonacular.com/cdn/ingredients_100x100/${ingredient['image']}'
+                                    : null;
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (imageUrl != null)
+                                      Image.network(
+                                        imageUrl,
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const SizedBox.shrink(),
+                                      ),
+                                    Text(name, textAlign: TextAlign.center),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ],
+
+                          // Equipment
+                          if (equipment.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Equipment:',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: equipment.map<Widget>((equip) {
+                                final name = equip['name'];
+                                final imageUrl =
+                                    equip['image'] != null &&
+                                        equip['image'].toString().isNotEmpty
+                                    ? equip['image']
+                                    : null;
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (imageUrl != null)
+                                      Image.network(
+                                        imageUrl,
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const SizedBox.shrink(),
+                                      ),
+                                    Text(name, textAlign: TextAlign.center),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }).toList())
+            else
+              // fallback in case analyzedInstructions is empty
+              Html(data: recipeInfo['instructions'] as String),
           ],
         ),
       ),

@@ -14,7 +14,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0' # adjust version
+          flutter-version: '3.8.1' # or whatever version you're using
 
       - run: flutter pub get
       - run: flutter build web --base-href /Good-Eats-Development/

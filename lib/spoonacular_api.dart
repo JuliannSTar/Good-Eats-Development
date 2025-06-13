@@ -6,9 +6,12 @@ class SpoonacularApi {
   static final String _apiKey = dotenv.env['SPOONACULAR_API_KEY'] ?? '';
   static const String _baseUrl = 'https://api.spoonacular.com';
 
-  static Future<List<dynamic>> searchRecipes(String query) async {
+  static Future<Map<String, dynamic>> searchRecipes(
+    String query, {
+    int offset = 0,
+  }) async {
     final uri = Uri.parse(
-      '$_baseUrl/recipes/complexSearch?query=${Uri.encodeQueryComponent(query)}&apiKey=$_apiKey&number=30',
+      '$_baseUrl/recipes/complexSearch?query=${Uri.encodeQueryComponent(query)}&apiKey=$_apiKey&number=30&offset=$offset',
     );
 
     final response = await http.get(uri);
@@ -24,7 +27,7 @@ class SpoonacularApi {
       throw Exception('Unexpected response format: "results" key not found.');
     }
 
-    return jsonBody['results'] as List<dynamic>;
+    return jsonBody;
   }
 
   static Future<Map<String, dynamic>> getRecipeInformation(int id) async {
